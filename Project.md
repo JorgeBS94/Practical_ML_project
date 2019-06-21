@@ -4,7 +4,8 @@ author: "Jorge Bretones Santamarina"
 date: "June 21st 2019"
 output:
   html_document:
-    keep_md: true
+    keep_md: yes
+  pdf_document: default
 ---
 
 
@@ -21,7 +22,7 @@ In this project we are faced with a classification problem. The reason is the ou
 
 ## Cross-validation scheme
 
-To develop a machine learning algorithm, considering only the training error is not sufficient. Doing so will most likely lead to overfitting the training data set, causing the method to perform poorly in new data sets. Thus, we will use cross-validation while training the model in order to account for the generalisation or out-of-sample error.
+To develop a machine learning algorithm, considering only the training error is not sufficient. Doing so will most likely lead to overfitting the training data set, causing the method to perform poorly in new data sets. Thus, we will use cross-validation while training the model in order to account for the generalisation or out-of-sample error. **It is important to point out that the out-of-sample error is given by the OBB output of the finalModel column of a randomforest model. OBB means out-of-bag, an estimate of the generalisation error.**
 
 Inside the cross-validation framework we have several possible choices. For this project, we have ruled out LOOCV (Leave-one-out cross-validation), as it is computationally expensive given we have a large dataset with nearly 20.000 observations. Additionally, we would like to consider the bias-var tradeoff when building our method, so we have opted for 5-fold cross-validation, computationally more feasible and with a nice compromise between bias and variance.
 
@@ -102,7 +103,8 @@ full_model <- train(classe~., data = new_training, method = "rf",trControl = fit
 ## The final value used for the model was mtry = 38.
 ```
 
-The model output shows that the accuracy of the best model is of 0.999. However, we do not want to employ a model like this, as it has many predictors and will not probably generalise well. Hence, to reduce the number of variables we run the varImp test to obtain a ranking of predictors according to their relevance to explain the output variable. We show the 10 most important predictors in what follows:
+The model output shows that the accuracy of the best model is of 0.999 (equivalently, it has a out-of-sample error of 0.01%). However, we do not want to employ a model like this, as it has many predictors and will not probably generalise well. Hence, to reduce the number of variables we run the varImp test to obtain a ranking of predictors according to their relevance to explain the output variable. We show the 10 most important predictors in what follows:
+
 
 
 
@@ -129,6 +131,24 @@ The model output shows that the accuracy of the best model is of 0.999. However,
 two_predmod <- train(classe~raw_timestamp_part_1+num_window,data = new_training,method= "rf",trControl = fitControl)
 ```
 
+
+```
+## Random Forest 
+## 
+## 19622 samples
+##     2 predictor
+##     5 classes: 'A', 'B', 'C', 'D', 'E' 
+## 
+## No pre-processing
+## Resampling: Cross-Validated (5 fold) 
+## Summary of sample sizes: 15697, 15697, 15696, 15699, 15699 
+## Resampling results:
+## 
+##   Accuracy   Kappa    
+##   0.9997451  0.9996776
+## 
+## Tuning parameter 'mtry' was held constant at a value of 2
+```
 
 ```
 ## 
@@ -226,10 +246,6 @@ full_model2 <- train(classe~., data = new_training, method = "rf",trControl = fi
 ```
 
 
-```r
-print(full_model2)
-```
-
 ```
 ## Random Forest 
 ## 
@@ -251,7 +267,25 @@ print(full_model2)
 ## The final value used for the model was mtry = 2.
 ```
 
-We see that including 52 predictors of physical parameters we get an accuracy of 0.9948, which is very high and corresponds to a probability of getting 20 correct out of 20 in the testing set of 0.8866. The predictions, as we see here, are correct:
+```
+## 
+## Call:
+##  randomForest(x = x, y = y, mtry = param$mtry) 
+##                Type of random forest: classification
+##                      Number of trees: 500
+## No. of variables tried at each split: 2
+## 
+##         OOB estimate of  error rate: 0.41%
+## Confusion matrix:
+##      A    B    C    D    E  class.error
+## A 5578    1    0    0    1 0.0003584229
+## B   12 3783    2    0    0 0.0036871214
+## C    0   16 3404    2    0 0.0052600818
+## D    0    0   37 3176    3 0.0124378109
+## E    0    0    0    6 3601 0.0016634322
+```
+
+We see that including 52 predictors of physical parameters we get an accuracy of 0.9948 and an out-of-sample error of 0.45%, which corresponds to a probability of getting 20 correct out of 20 in the testing set of 0.8866. The predictions, as we see here, are correct:
 
 
 ```r
@@ -272,7 +306,7 @@ varImpPlot(full_model2$finalModel, sort = TRUE, n.var = 52)
 
 ![](Project_files/figure-html/unnamed-chunk-18-1.png)<!-- -->
 
-Given this plot, I have fitted a model with the 20, 25, 30 and 40 most important predictors. The results show that with 30 out of 52 predictors we are still able to get an accuracy of 0.994, which is quite good. This way we avoid including the last 22 predictors initially employed and we reduce the complexity of the model.
+Given this plot, I have fitted a model with the 20, 25, 30 and 40 most important predictors. The results show that with 30 out of 52 predictors we are still able to get an accuracy of 0.994 and OBB of 0.47%, which is quite good. This way we avoid including the last 22 predictors initially employed and we reduce the complexity of the model.
 
 
 
@@ -290,10 +324,6 @@ mod30 <- train(formul,data = new_training, method = "rf",trControl = fitControl)
 ```
 
 
-```r
-print(mod30)
-```
-
 ```
 ## Random Forest 
 ## 
@@ -303,16 +333,34 @@ print(mod30)
 ## 
 ## No pre-processing
 ## Resampling: Cross-Validated (5 fold) 
-## Summary of sample sizes: 15698, 15696, 15699, 15698, 15697 
+## Summary of sample sizes: 15698, 15697, 15697, 15698, 15698 
 ## Resampling results across tuning parameters:
 ## 
 ##   mtry  Accuracy   Kappa    
-##    2    0.9936806  0.9920064
-##   16    0.9936805  0.9920064
-##   30    0.9882789  0.9851729
+##    2    0.9937315  0.9920708
+##   16    0.9937316  0.9920710
+##   30    0.9875142  0.9842056
 ## 
 ## Accuracy was used to select the optimal model using the largest value.
-## The final value used for the model was mtry = 2.
+## The final value used for the model was mtry = 16.
+```
+
+```
+## 
+## Call:
+##  randomForest(x = x, y = y, mtry = param$mtry) 
+##                Type of random forest: classification
+##                      Number of trees: 500
+## No. of variables tried at each split: 16
+## 
+##         OOB estimate of  error rate: 0.47%
+## Confusion matrix:
+##      A    B    C    D    E class.error
+## A 5572    4    3    0    1 0.001433692
+## B   13 3769   15    0    0 0.007374243
+## C    0    9 3403   10    0 0.005552309
+## D    0    1   24 3188    3 0.008706468
+## E    0    1    4    5 3597 0.002772387
 ```
 
 The predictions in the test set are correct:

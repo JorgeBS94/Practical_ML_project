@@ -4,7 +4,8 @@ author: "Jorge Bretones Santamarina"
 date: "June 21st 2019"
 output:
   html_document:
-    keep_md: true
+    keep_md: yes
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -36,7 +37,7 @@ In this project we are faced with a classification problem. The reason is the ou
 
 ## Cross-validation scheme
 
-To develop a machine learning algorithm, considering only the training error is not sufficient. Doing so will most likely lead to overfitting the training data set, causing the method to perform poorly in new data sets. Thus, we will use cross-validation while training the model in order to account for the generalisation or out-of-sample error.
+To develop a machine learning algorithm, considering only the training error is not sufficient. Doing so will most likely lead to overfitting the training data set, causing the method to perform poorly in new data sets. Thus, we will use cross-validation while training the model in order to account for the generalisation or out-of-sample error. **It is important to point out that the out-of-sample error is given by the OBB output of the finalModel column of a randomforest model. OBB means out-of-bag, an estimate of the generalisation error.**
 
 Inside the cross-validation framework we have several possible choices. For this project, we have ruled out LOOCV (Leave-one-out cross-validation), as it is computationally expensive given we have a large dataset with nearly 20.000 observations. Additionally, we would like to consider the bias-var tradeoff when building our method, so we have opted for 5-fold cross-validation, computationally more feasible and with a nice compromise between bias and variance.
 
@@ -99,7 +100,8 @@ full_model <- train(classe~., data = new_training, method = "rf",trControl = fit
 print(full_model)
 ```
 
-The model output shows that the accuracy of the best model is of 0.999. However, we do not want to employ a model like this, as it has many predictors and will not probably generalise well. Hence, to reduce the number of variables we run the varImp test to obtain a ranking of predictors according to their relevance to explain the output variable. We show the 10 most important predictors in what follows:
+The model output shows that the accuracy of the best model is of 0.999 (equivalently, it has a out-of-sample error of 0.01%). However, we do not want to employ a model like this, as it has many predictors and will not probably generalise well. Hence, to reduce the number of variables we run the varImp test to obtain a ranking of predictors according to their relevance to explain the output variable. We show the 10 most important predictors in what follows:
+
 ```{r,include = FALSE}
 #We put the output in a dataframe
 import_var <- varImp(full_model$finalModel,scale = FALSE)
@@ -117,6 +119,7 @@ head(imp,10)
 
 ```{r, include = FALSE}
 two_predmod <- readRDS("two_predmod.rds")
+ftwo_predmod <- readRDS("ftwo_predmod.rds")
 ```
 
 ```{r,eval = FALSE}
@@ -126,6 +129,7 @@ two_predmod <- train(classe~raw_timestamp_part_1+num_window,data = new_training,
 ```{r, echo = FALSE}
 #We print the model to show the accuracy achieved
 print(two_predmod)
+ftwo_predmod
 ```
 
 **However, let's do a plot of these variables vs classe to illustrate what is going on:**
@@ -160,11 +164,12 @@ We can then fit a model of classe vs all of them:
 full_model2 <- train(classe~., data = new_training, method = "rf",trControl = fitControl)
 ```
 
-```{r}
+```{r,echo = FALSE}
 print(full_model2)
+ffull_model2
 ```
 
-We see that including 52 predictors of physical parameters we get an accuracy of 0.9948, which is very high and corresponds to a probability of getting 20 correct out of 20 in the testing set of 0.8866. The predictions, as we see here, are correct:
+We see that including 52 predictors of physical parameters we get an accuracy of 0.9948 and an out-of-sample error of 0.45%, which corresponds to a probability of getting 20 correct out of 20 in the testing set of 0.8866. The predictions, as we see here, are correct:
 
 ```{r}
 predict(full_model2,testing)
@@ -176,10 +181,11 @@ However, this model has a high number of predictors, so we might want to check i
 varImpPlot(full_model2$finalModel, sort = TRUE, n.var = 52)
 ```
 
-Given this plot, I have fitted a model with the 20, 25, 30 and 40 most important predictors. The results show that with 30 out of 52 predictors we are still able to get an accuracy of 0.994, which is quite good. This way we avoid including the last 22 predictors initially employed and we reduce the complexity of the model.
+Given this plot, I have fitted a model with the 20, 25, 30 and 40 most important predictors. The results show that with 30 out of 52 predictors we are still able to get an accuracy of 0.994 and OBB of 0.47%, which is quite good. This way we avoid including the last 22 predictors initially employed and we reduce the complexity of the model.
 
 ```{r, include = FALSE}
 mod30 <- readRDS("mod30.rds")
+fmod30<- readRDS("fmod30.rds")
 ```
 
 ```{r,eval = FALSE}
@@ -194,8 +200,9 @@ formul <- as.formula(paste("classe ~ ",cols))
 mod30 <- train(formul,data = new_training, method = "rf",trControl = fitControl)
 ```
 
-```{r}
+```{r,echo = FALSE}
 print(mod30)
+fmod30
 ``` 
 
 The predictions in the test set are correct:
