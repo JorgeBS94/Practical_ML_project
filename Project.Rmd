@@ -1,0 +1,213 @@
+---
+title: "Practical Machine Learning Project"
+author: "Jorge Bretones Santamarina"
+date: "June 21st 2019"
+output:
+  html_document:
+    keep_md: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r,include = FALSE}
+#We load the data and the necessary R packages
+training <- read.csv("pml-training.csv")
+testing <- read.csv("pml-testing.csv")
+library(dplyr)
+library(psych)
+library(caret)
+library(car)
+library(MASS)
+library(PerformanceAnalytics)
+library(ggplot2)
+library(gridExtra)
+library(randomForest)
+```
+
+## Introduction
+
+Nowadays, using sport tracking devices it is possible to measure how well a certain exercise is performed, something known as *qualitative activity recognition*. Hence, in this project, data from 6 participants were collected using accelerometers in the belt, forearm, arm and dumbell. They did barbell lifts 5 different ways (1 correct and the rest incorrect). Therefore, the goal of this project is to build a machine learning algorithm to classify exercise performance into 1 of the 5 categories.
+
+## Algorithm selection
+
+In this project we are faced with a classification problem. The reason is the outcome variable "classe" is a factor with 5 levels, each of them corresponding to one way of performing the exercises. Hence, as we want to predict a discrete outcome, we cannot employ linear regression. Inside classification methods, there are multiple possibilities to employ. However, due to its high accuracy, we will use random forest to train our prediction model.
+
+## Cross-validation scheme
+
+To develop a machine learning algorithm, considering only the training error is not sufficient. Doing so will most likely lead to overfitting the training data set, causing the method to perform poorly in new data sets. Thus, we will use cross-validation while training the model in order to account for the generalisation or out-of-sample error.
+
+Inside the cross-validation framework we have several possible choices. For this project, we have ruled out LOOCV (Leave-one-out cross-validation), as it is computationally expensive given we have a large dataset with nearly 20.000 observations. Additionally, we would like to consider the bias-var tradeoff when building our method, so we have opted for 5-fold cross-validation, computationally more feasible and with a nice compromise between bias and variance.
+
+## Cleaning the data:
+
+First of all, we see that the dataset has 19622 observations of 160 predictor variables. The first thing to do is clean the dataset, eliminating those variables with multiple missing variables, which are not explanatory. I have carried 2 procedures to clean the data:
+
+**A. I have eliminated those columns of the dataframe with a high percentage of NA values (greater than 60%).**
+
+```{r}
+indexes <- apply(training,2,function(x){
+  my_sum <- sum(is.na(x))
+  if (my_sum > length(x)*0.6){
+    index <- 1 #Bad column
+  }else{
+    index <- 0
+  }
+})
+#Now we select those positions which contain 0s (good columns to keep)
+good_indexes <- which(indexes == 0)
+#We keep the data we want (not NAs)
+new_training <- training[,good_indexes]
+testing <- testing[,good_indexes]
+```
+
+**B. I have elminated factor variables as "kurtosis","skewness","max","min" or "amplitude", which had multiple missing values other than NAs. At the same time, we ommit the X and user_name variables, which are not explanatory.**
+
+```{r}
+bad_colnames <- grep("kurtosis|skewness|amplitude|max|min|X|user_name",colnames(new_training))
+new_training <- new_training[,-bad_colnames]
+testing <- testing[,-bad_colnames]
+```
+
+**At this point, we are left with 58 possible predictors. In my first analysis I ignored the impact of variables as "raw_timestamp_part_1" or "num_window", so I left them in the model. We will review the consequences of this in the next section**
+
+## Results I: full model fitting and variable selection
+
+We have used the caret package train function to train our model for the output "classe" against all 58 predictors left in the model. We have parallelised the code to make it faster. The goal of fitting a model with all predictors is to perform a variable importance analysis afterwards. The output of this test will give us a ranking of the predictors, depending on their relevance to explain the output variable. The full model is the following:
+
+```{r, include= FALSE}
+#Here we upload the full_model, as it takes time to be computed. Then, in the next section, we show the code we used without evaluating it!
+full_model <- readRDS("full_model.rds")
+```
+
+```{r, eval = FALSE}
+set.seed(45) #It is important to reproduce, as randomForest has a random component
+library(parallel)
+library(doParallel)
+library(randomForest)
+cluster <- makeCluster(detectCores() - 1) 
+registerDoParallel(cluster)
+#We define the cross-validation scheme, which will be 5-fold crossvalidation here.
+#We do not want to use LOOCV, because it is computationally expensive 
+#and it might lead to overfitting
+fitControl <- trainControl(method = "cv",number = 5,allowParallel = TRUE)
+full_model <- train(classe~., data = new_training, method = "rf",trControl = fitControl)
+```
+
+```{r, echo = FALSE}
+print(full_model)
+```
+
+The model output shows that the accuracy of the best model is of 0.999. However, we do not want to employ a model like this, as it has many predictors and will not probably generalise well. Hence, to reduce the number of variables we run the varImp test to obtain a ranking of predictors according to their relevance to explain the output variable. We show the 10 most important predictors in what follows:
+```{r,include = FALSE}
+#We put the output in a dataframe
+import_var <- varImp(full_model$finalModel,scale = FALSE)
+imp <- data.frame (overall = import_var$Overall,names = rownames(import_var))
+imp <- imp[order(imp$overall, decreasing = T), ]
+imp$overall <- round(imp$overall,4)
+```
+
+```{r, echo = FALSE}
+#We show the 10 most important predictors of the full model
+head(imp,10)
+```
+
+**These results are quite surprising, as we see that raw_timestamp_part_1 and num_window are far more important than the rest of the variables, only closely followed by roll_belt. It can be shown that if we fit a model with only both of them, we get an accuracy of more than 99.9%**
+
+```{r, include = FALSE}
+two_predmod <- readRDS("two_predmod.rds")
+```
+
+```{r,eval = FALSE}
+two_predmod <- train(classe~raw_timestamp_part_1+num_window,data = new_training,method= "rf",trControl = fitControl)
+```
+
+```{r, echo = FALSE}
+#We print the model to show the accuracy achieved
+print(two_predmod)
+```
+
+**However, let's do a plot of these variables vs classe to illustrate what is going on:**
+
+```{r,echo = FALSE}
+g <- ggplot(aes(y = raw_timestamp_part_1, x = classe, col = user_name),data = training) + geom_point()
+h <- ggplot(aes(y = num_window, x = classe, col = user_name), data = training) + geom_point()
+grid.arrange(g,h,ncol = 2)
+```
+
+In this plot we see that both variables are highly correlated with the outcome "classe", but this is assuredly an artifact. By coloring the plot with respect to the user_name variable, we see that the exercises were performed sequencially by each of the participants. **Hence, these predictors are not reliable and they must be eliminated from the analysis. This exercise highlights the importance of being critical with the varImp results. Moreover, exploratory data analysis is a good way to understanding what is happening inside the data**
+
+## Results II: best model achieved only with accelerometer data predictor variables
+
+If we discard the temporal variables (first columns of the dataset), we are left with the following predictors:
+
+```{r,include = FALSE}
+bad_cols <- grep("timestamp|window",colnames(new_training))
+new_training <- new_training[,-bad_cols]
+testing<- testing[,-bad_cols]
+full_model2 <- readRDS("full_model2.rds")
+ffull_model2 <- readRDS("ffull_model2.rds")
+```
+
+```{r,echo = FALSE}
+str(new_training)
+```
+
+We can then fit a model of classe vs all of them: 
+
+```{r, eval = FALSE}
+full_model2 <- train(classe~., data = new_training, method = "rf",trControl = fitControl)
+```
+
+```{r}
+print(full_model2)
+```
+
+We see that including 52 predictors of physical parameters we get an accuracy of 0.9948, which is very high and corresponds to a probability of getting 20 correct out of 20 in the testing set of 0.8866. The predictions, as we see here, are correct:
+
+```{r}
+predict(full_model2,testing)
+```
+
+However, this model has a high number of predictors, so we might want to check if it is possible to reduce that number while keeping a high accuracy level. We do this by running a varImp analysis:
+
+```{r,fig.width= 7,fig.height = 9}
+varImpPlot(full_model2$finalModel, sort = TRUE, n.var = 52)
+```
+
+Given this plot, I have fitted a model with the 20, 25, 30 and 40 most important predictors. The results show that with 30 out of 52 predictors we are still able to get an accuracy of 0.994, which is quite good. This way we avoid including the last 22 predictors initially employed and we reduce the complexity of the model.
+
+```{r, include = FALSE}
+mod30 <- readRDS("mod30.rds")
+```
+
+```{r,eval = FALSE}
+import_var2 <- varImp(full_model2,scale = FALSE)$importance
+imp2 <- data.frame (overall = import_var2$Overall,names = rownames(import_var2))
+imp2 <- imp2[order(imp2$overall, decreasing = T), ]
+imp2$overall <- round(imp2$overall,4)
+imp2
+#We try the 30 most important predictors:
+cols <- paste(imp2$names[1:30], collapse = "+")
+formul <- as.formula(paste("classe ~ ",cols))
+mod30 <- train(formul,data = new_training, method = "rf",trControl = fitControl)
+```
+
+```{r}
+print(mod30)
+``` 
+
+The predictions in the test set are correct:
+
+```{r}
+predict(mod30,testing)
+```
+
+## Conclusion
+
+In this project we have tried to predict the quality of different exercises according to the data recorded with accelerometers. We have eliminated the missing values in the dataset, leaving 52 predictors. The following conclusions can be extracted from the analysis:
+
+**1. We have seen the importance of evaluating the output of varImp, as variables like raw_timestamp_par_1 and num_window might seem relevant, while they are just artifacts. Using exploratory data analysis has been helpful to address this issue**
+
+**2. Fitting a model with 52 variables gave us an accuracy of 0.994, which is quite high. We have also seen that cutting the number of predictors down to the 30 most important ones is able to reach a very similar accuracy. We might then choose this model over the big one, as it is simpler and probably less prone to overfit the training dataset**
