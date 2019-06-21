@@ -381,4 +381,4 @@ In this project we have tried to predict the quality of different exercises acco
 
 **1. We have seen the importance of evaluating the output of varImp, as variables like raw_timestamp_par_1 and num_window might seem relevant, while they are just artifacts. Using exploratory data analysis has been helpful to address this issue**
 
-**2. Fitting a model with 52 variables gave us an accuracy of 0.994, which is quite high. We have also seen that cutting the number of predictors down to the 30 most important ones is able to reach a very similar accuracy. We might then choose this model over the big one, as it is simpler and probably less prone to overfit the training dataset**
+**2. Fitting a model with 52 variables gave us an accuracy of 0.994 and out-of-sample error of 0.41%, which is quite high. We have also seen that cutting the number of predictors down to the 30 most important ones is able to reach a very similar accuracy (OBB of 0.47%). We might then choose this model over the big one, as it is simpler and probably less prone to overfit the training dataset**
